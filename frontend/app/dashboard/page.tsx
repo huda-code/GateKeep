@@ -11,8 +11,24 @@ export default function DashboardPage() {
   const [employees, setEmployees] = useState<EmployeeSummary[]>(
     []
   );
+  const [activeTab, setActiveTab] = useState<
+    "active" | "past"
+  >("active");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const activeEmployees = employees.filter(
+    (employee) => employee.employment_status !== "terminated"
+  );
+
+  const pastEmployees = employees.filter(
+    (employee) => employee.employment_status === "terminated"
+  );
+
+  const visibleEmployees =
+    activeTab === "active"
+      ? activeEmployees
+      : pastEmployees;
 
   useEffect(() => {
     const token = localStorage.getItem("gatekeep_token");
@@ -75,15 +91,20 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric
-            label="Employees"
-            value={employees.length}
+            label="Active employees"
+            value={activeEmployees.length}
+          />
+
+          <Metric
+            label="Past employees"
+            value={pastEmployees.length}
           />
 
           <Metric
             label="Active accounts"
-            value={employees.reduce(
+            value={activeEmployees.reduce(
               (total, employee) =>
                 total + employee.active_accounts,
               0
@@ -93,7 +114,7 @@ export default function DashboardPage() {
           <Metric
             label="High-risk employees"
             value={
-              employees.filter(
+              activeEmployees.filter(
                 (employee) => employee.risk_level === "High"
               ).length
             }
@@ -113,7 +134,45 @@ export default function DashboardPage() {
         )}
 
         {!loading && !error && (
-          <div className="mt-8 overflow-x-auto rounded-xl border border-slate-800">
+          <>
+            <div className="mt-10 border-b border-slate-800">
+              <nav
+                className="-mb-px flex gap-8"
+                aria-label="Employee categories"
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("active")}
+                  className={`border-b-2 px-1 pb-4 text-sm font-semibold transition ${
+                    activeTab === "active"
+                      ? "border-cyan-400 text-cyan-300"
+                      : "border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                  }`}
+                >
+                  Active Employees
+                  <span className="ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-xs">
+                    {activeEmployees.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("past")}
+                  className={`border-b-2 px-1 pb-4 text-sm font-semibold transition ${
+                    activeTab === "past"
+                      ? "border-cyan-400 text-cyan-300"
+                      : "border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                  }`}
+                >
+                  Past Employees
+                  <span className="ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-xs">
+                    {pastEmployees.length}
+                  </span>
+                </button>
+              </nav>
+            </div>
+
+            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full min-w-[900px] text-left">
               <thead className="bg-slate-900 text-sm text-slate-400">
                 <tr>
@@ -128,7 +187,20 @@ export default function DashboardPage() {
               </thead>
 
               <tbody>
-                {employees.map((employee) => (
+                {visibleEmployees.length === 0 && (
+                  <tr className="border-t border-slate-800">
+                    <td
+                      colSpan={7}
+                      className="px-5 py-14 text-center text-slate-400"
+                    >
+                      {activeTab === "active"
+                        ? "No active employees found."
+                        : "No past employees yet."}
+                    </td>
+                  </tr>
+                )}
+
+                {visibleEmployees.map((employee) => (
                   <tr
                     key={employee.id}
                     className="border-t border-slate-800 bg-slate-950 hover:bg-slate-900/70"
@@ -152,8 +224,20 @@ export default function DashboardPage() {
                     </td>
 
                     <td className="px-5 py-4">
-                      <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-sm capitalize text-emerald-300">
-                        {employee.employment_status}
+                      <span
+                        className={`rounded-full px-3 py-1 text-sm capitalize ${
+                          employee.employment_status === "terminated"
+                            ? "bg-slate-700/60 text-slate-300"
+                            : employee.employment_status ===
+                                "termination_scheduled"
+                              ? "bg-amber-500/10 text-amber-300"
+                              : "bg-emerald-500/10 text-emerald-300"
+                        }`}
+                      >
+                        {employee.employment_status.replaceAll(
+                          "_",
+                          " "
+                        )}
                       </span>
                     </td>
 
@@ -181,7 +265,8 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </section>
     </main>
