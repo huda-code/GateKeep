@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import Base, engine, get_db
 from app.models import AuditEvent, CompanyAsset, Employee, EmployeeAccount, TerminationRun
 from app.schemas import AccountCreate, AssetTransferRequest, EmployeeCreate, EmployeePatch, LoginRequest, RevokeRequest, TerminationRequest
-from app.services import add_account, audit, auto_provision, employee_detail, employee_summary, reactivate_employee, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
+from app.services import ACCESS_TEMPLATES, add_account, audit, auto_provision, employee_detail, employee_summary, reactivate_employee, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
 
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title='GateKeep API',version='2.0.0')
@@ -29,6 +29,19 @@ def me(user=Depends(require_admin)): return user
 def demo_reset(db:Session=Depends(get_db)):
     reset_demo(db); return {'status':'reset','employees':3}
 
+@app.get('/api/v1/access-templates')
+def list_access_templates(user=Depends(require_admin)):
+    return [
+        {
+            'key': key,
+            'name': template['name'],
+            'department': template['department'],
+            'description': template['description'],
+            'accounts': template['accounts'],
+        }
+        for key, template in ACCESS_TEMPLATES.items()
+    ]
+
 @app.get('/api/v1/employees')
 def list_employees(db:Session=Depends(get_db),user=Depends(require_admin)):
     return [employee_summary(e) for e in db.scalars(select(Employee).order_by(Employee.full_name)).all()]
@@ -38,7 +51,18 @@ def create_employee(payload:EmployeeCreate,db:Session=Depends(get_db),user=Depen
     e=Employee(full_name=payload.full_name,company_email=str(payload.company_email),personal_email=str(payload.personal_email) if payload.personal_email else None,department=payload.department,job_title=payload.job_title,manager_name=payload.manager_name,start_date=payload.start_date,employment_status=payload.employment_status,risk_score=45 if payload.department.lower()=='engineering' else 30)
     db.add(e); db.commit(); db.refresh(e)
     add_account(db,e,'Company Directory',e.company_email,'Employee','low','directory',sessions=0)
-    if payload.auto_provision: auto_provision(db,e,payload.github_username,payload.microsoft_username,str(payload.google_workspace_email) if payload.google_workspace_email else None)
+    if payload.auto_provision:
+        try:
+            auto_provision(
+                db,
+                e,
+                payload.github_username,
+                payload.microsoft_username,
+                str(payload.google_workspace_email) if payload.google_workspace_email else None,
+                payload.access_template,
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error))
     audit(db,e.id,user['email'],'create_employee',e.company_email,'completed','Employee record and access inventory created')
     return employee_detail(e)
 @app.get('/api/v1/employees/{employee_id}')

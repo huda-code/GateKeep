@@ -18,6 +18,7 @@ class EmployeeCreate(BaseModel):
     microsoft_username: str | None = None
     google_workspace_email: EmailStr | None = None
     auto_provision: bool = True
+    access_template: str | None = None
 
 class EmployeePatch(BaseModel):
     full_name: str | None = None

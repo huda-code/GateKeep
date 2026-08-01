@@ -18,26 +18,141 @@ def add_account(db: Session, employee: Employee, platform: str, identifier: str,
     for c in credentials or []: db.add(Credential(employee_account_id=a.id, credential_type=c, status="active", metadata_json="{}"))
     return a
 
-def auto_provision(db: Session, employee: Employee, github: str | None=None, microsoft: str | None=None, google: str | None=None):
-    dept=employee.department.lower(); local=employee.company_email.split('@')[0]
-    if dept == 'engineering':
-        add_account(db, employee, 'Google Workspace', google or employee.company_email, 'Standard', 'medium', sessions=2, credentials=['OAuth grant'])
-        add_account(db, employee, 'Slack', local, 'Member', 'low', sessions=2)
-        add_account(db, employee, 'GitHub', github or local, 'Developer', 'high', sessions=1, credentials=['Personal access token'])
-        add_account(db, employee, 'Jira', employee.company_email, 'Developer', 'medium')
-        add_account(db, employee, 'AWS', local.replace('.','-'), 'Developer', 'high', sessions=1, credentials=['Access key'])
-        add_account(db, employee, 'VPN', local, 'Engineering', 'high', sessions=1, credentials=['VPN certificate'])
-    elif dept == 'finance':
-        add_account(db, employee, 'Microsoft 365', microsoft or employee.company_email, 'Standard', 'medium', sessions=2)
-        add_account(db, employee, 'Slack', local, 'Member', 'low')
-        add_account(db, employee, 'QuickBooks', employee.company_email, 'Accountant', 'high')
-        add_account(db, employee, 'Google Drive', employee.company_email, 'Editor', 'medium')
-        db.add(CompanyAsset(employee_id=employee.id, asset_type='company_card', provider='Ramp', identifier='Ending 4812', status='active', metadata_json=json.dumps({'last4':'4812','monthly_limit':5000,'current_balance':420.35})))
-    else:
-        add_account(db, employee, 'Google Workspace', google or employee.company_email, 'Standard', 'medium')
-        add_account(db, employee, 'Slack', local, 'Member', 'low')
-        add_account(db, employee, 'Notion', employee.company_email, 'Member', 'low')
+ACCESS_TEMPLATES = {
+    "software_engineer": {
+        "name": "Software Engineer",
+        "department": "Engineering",
+        "description": "Development, cloud, source control, project tracking, and secure network access.",
+        "accounts": [
+            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
+            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
+            {"platform": "GitHub", "access": "Developer", "risk": "high", "sessions": 1, "credentials": ["Personal access token"]},
+            {"platform": "Jira", "access": "Developer", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "AWS", "access": "Developer", "risk": "high", "sessions": 1, "credentials": ["Access key"]},
+            {"platform": "VPN", "access": "Engineering", "risk": "high", "sessions": 1, "credentials": ["VPN certificate"]},
+        ],
+    },
+    "designer": {
+        "name": "Designer",
+        "department": "Design",
+        "description": "Design, collaboration, creative software, and brand asset access.",
+        "accounts": [
+            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
+            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
+            {"platform": "Figma", "access": "Editor", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Notion", "access": "Member", "risk": "low", "sessions": 1, "credentials": []},
+            {"platform": "Adobe Creative Cloud", "access": "Licensed User", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Brand Library", "access": "Editor", "risk": "medium", "sessions": 1, "credentials": []},
+        ],
+    },
+    "finance": {
+        "name": "Finance",
+        "department": "Finance",
+        "description": "Accounting, payments, expense management, reporting, and finance document access.",
+        "accounts": [
+            {"platform": "Microsoft 365", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": []},
+            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 1, "credentials": []},
+            {"platform": "QuickBooks", "access": "Accountant", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Ramp", "access": "Cardholder", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Google Drive", "access": "Finance Editor", "risk": "medium", "sessions": 1, "credentials": []},
+        ],
+    },
+    "data_analyst": {
+        "name": "Data Analyst",
+        "department": "Data",
+        "description": "Analytics, dashboards, databases, notebooks, and reporting access.",
+        "accounts": [
+            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
+            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
+            {"platform": "Tableau", "access": "Creator", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Snowflake", "access": "Analyst", "risk": "high", "sessions": 1, "credentials": ["Service credential"]},
+            {"platform": "JupyterHub", "access": "User", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "GitHub", "access": "Read", "risk": "medium", "sessions": 1, "credentials": []},
+        ],
+    },
+}
+
+
+def infer_access_template(employee: Employee) -> str:
+    department = employee.department.lower()
+    title = employee.job_title.lower()
+
+    if "design" in department or "design" in title or "brand" in title:
+        return "designer"
+
+    if "finance" in department or "account" in title:
+        return "finance"
+
+    if "data" in department or "analyst" in title:
+        return "data_analyst"
+
+    return "software_engineer"
+
+
+def auto_provision(
+    db: Session,
+    employee: Employee,
+    github: str | None = None,
+    microsoft: str | None = None,
+    google: str | None = None,
+    template_key: str | None = None,
+):
+    selected_template = template_key or infer_access_template(employee)
+    template = ACCESS_TEMPLATES.get(selected_template)
+
+    if not template:
+        raise ValueError(f"Unknown access template: {selected_template}")
+
+    local = employee.company_email.split("@")[0]
+    created_accounts = []
+
+    for definition in template["accounts"]:
+        platform = definition["platform"]
+
+        if platform == "GitHub":
+            identifier = github or local
+        elif platform == "Microsoft 365":
+            identifier = microsoft or employee.company_email
+        elif platform == "Google Workspace":
+            identifier = google or employee.company_email
+        elif platform in {"Slack", "VPN", "AWS"}:
+            identifier = local.replace(".", "-")
+        else:
+            identifier = employee.company_email
+
+        account = add_account(
+            db,
+            employee,
+            platform,
+            identifier,
+            definition["access"],
+            definition["risk"],
+            sessions=definition["sessions"],
+            credentials=definition["credentials"],
+        )
+
+        created_accounts.append(account)
+
+    if selected_template == "finance":
+        db.add(
+            CompanyAsset(
+                employee_id=employee.id,
+                asset_type="company_card",
+                provider="Ramp",
+                identifier="Ending 4812",
+                status="active",
+                metadata_json=json.dumps(
+                    {
+                        "last4": "4812",
+                        "monthly_limit": 5000,
+                        "current_balance": 0,
+                    }
+                ),
+            )
+        )
+
     db.commit()
+    return created_accounts
 
 def serialize_account(a: EmployeeAccount):
     return {'id':a.id,'employee_id':a.employee_id,'platform':a.platform,'account_type':a.account_type,'identifier':a.identifier,'access_level':a.access_level,'status':a.status,'last_used_at':a.last_used_at,'risk_level':a.risk_level,'external_account_id':a.external_account_id,'metadata':json.loads(a.metadata_json or '{}'),'revocation_verified':a.revocation_verified,'active_sessions':sum(1 for s in a.sessions if s.active),'active_credentials':sum(1 for c in a.credentials if c.status=='active')}
