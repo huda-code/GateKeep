@@ -1,89 +1,91 @@
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { MeetGarry } from "@/components/MeetGarry";
+import { Logo } from "@/components/ui/Logo";
 
+const FEATURES = [
+  {
+    title: "Discover access",
+    description:
+      "Company accounts, live sessions, credentials, cloud permissions, VPN access and assigned assets — including the ones nobody wrote down.",
+  },
+  {
+    title: "Revoke safely",
+    description:
+      "Close a single account or every access path an employee holds, across all connected systems, in one pass.",
+  },
+  {
+    title: "Verify everything",
+    description:
+      "Re-check each revocation until no session or token survives, and keep the audit trail that proves it.",
+  },
+];
+
+/**
+ * The one dark screen in the product. The app itself stays light and
+ * monochrome; the brand lives here.
+ */
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-brand">
+      <MeetGarry />
+
+      {/* No background on the bar — it sits directly on the dark green. */}
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
-        <Link href="/" className="text-2xl font-bold tracking-tight">
-          GateKeep
+        {/* data-garry-target is where the intro animation lands. */}
+        <Link href="/" data-garry-target className="text-pop">
+          <Logo size={22} />
         </Link>
 
         <Link
           href="/login"
-          className="rounded-lg border border-slate-700 px-5 py-2.5 font-medium transition hover:border-cyan-400 hover:bg-slate-900"
+          className="flex h-control items-center gap-2 border border-brand-hairline px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:text-pop"
         >
           Login
+          <ArrowRight size={12} strokeWidth={2} />
         </Link>
       </header>
 
-      <section className="mx-auto flex max-w-6xl flex-col items-center px-6 py-28 text-center">
-        <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300">
-          Autonomous employee offboarding
-        </div>
+      <main className="mx-auto max-w-7xl px-6">
+        <section className="border-b border-brand-hairline py-28">
+          <p className="font-ui text-ui text-pop">
+            Autonomous employee offboarding
+          </p>
 
-        <h1 className="mt-8 max-w-4xl text-5xl font-bold leading-tight sm:text-7xl">
-          One employee out.
-          <span className="block text-cyan-400">
-            Every access path closed.
-          </span>
-        </h1>
+          <h1 className="mt-8 max-w-3xl font-display text-[56px] leading-[1.05] text-surface">
+            One employee out.
+            <span className="block text-pop">Every access path closed.</span>
+          </h1>
 
-        <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-300">
-          GateKeep discovers employee access across company systems,
-          revokes accounts and credentials, verifies every action, and
-          produces an audit-ready report.
-        </p>
+          <p className="mt-8 max-w-xl font-ui text-ui leading-6 text-on-brand">
+            GateKeep discovers employee access across company systems, revokes
+            accounts and credentials, verifies every action, and produces an
+            audit-ready report.
+          </p>
 
-        <div className="mt-10 flex flex-wrap justify-center gap-4">
           <Link
             href="/login"
-            className="rounded-xl bg-cyan-400 px-7 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+            className="mt-10 inline-flex h-control items-center gap-2 bg-pop px-inset font-ui text-ui text-brand transition-opacity hover:opacity-90"
           >
-            Get Started
+            Get started
+            <ArrowRight size={12} strokeWidth={2} />
           </Link>
+        </section>
 
-          <a
-            href="http://127.0.0.1:8001/docs"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-xl border border-slate-700 px-7 py-3 font-semibold transition hover:bg-slate-900"
-          >
-            View API
-          </a>
-        </div>
+        <section className="grid gap-10 py-16 md:grid-cols-3 md:gap-16">
+          {FEATURES.map((feature) => (
+            <article key={feature.title} className="flex flex-col gap-3">
+              <h2 className="font-display text-title text-surface">
+                {feature.title}
+              </h2>
 
-        <div className="mt-24 grid w-full gap-5 text-left md:grid-cols-3">
-          <Feature
-            title="Discover access"
-            description="See company accounts, sessions, credentials, cloud permissions, VPN access, and assigned assets."
-          />
-
-          <Feature
-            title="Revoke safely"
-            description="Remove individual accounts or terminate an employee across every connected system."
-          />
-
-          <Feature
-            title="Verify everything"
-            description="Confirm that sessions and credentials are gone and preserve a complete audit trail."
-          />
-        </div>
-      </section>
-    </main>
-  );
-}
-
-function Feature({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="mt-3 leading-7 text-slate-400">{description}</p>
-    </article>
+              <p className="font-ui text-ui leading-6 text-on-brand">
+                {feature.description}
+              </p>
+            </article>
+          ))}
+        </section>
+      </main>
+    </div>
   );
 }

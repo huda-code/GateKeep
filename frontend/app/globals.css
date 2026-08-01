@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   GateKeep design tokens
+   Source of truth: Figma "Gatekeep" -> /login (node 1:33)
+
+   The four values under "From Figma" are the published Figma variables.
+   Everything under "Derived" is extrapolated from the login screen so the
+   rest of the app can be built from the same system. Swap the values here
+   and every screen follows.
+   --------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* From Figma ------------------------------------------------------------ */
+  --gk-ink: #000000; /* Font/Primary   */
+  --gk-ink-secondary: rgba(0, 0, 0, 0.6); /* Font/Secondary */
+  --gk-ink-tertiary: rgba(0, 0, 0, 0.3); /* Font/Tertiary  */
+  --gk-stroke: rgba(0, 0, 0, 0.1); /* Stroke/10      */
+
+  /* Brand ------------------------------------------------------------------
+     CONTRAST RULE: pop green on white is unreadable (it's a bright lime).
+     Use pop only as a FILL behind dark-green text, or as text ON dark green.
+     Never as text on a light surface. */
+  --gk-brand: #172603; /* dark green — inverted surfaces  */
+  --gk-pop: #d7f23e; /* pop green — affirmative accent  */
+  --gk-on-brand: rgba(255, 255, 255, 0.72); /* secondary text on dark green */
+
+  /* Derived --------------------------------------------------------------- */
+  --gk-canvas: #eaeaea; /* page background on /login  */
+  --gk-surface: #ffffff; /* the login modal            */
+  --gk-sunken: rgba(0, 0, 0, 0.03); /* table headers, inset rows  */
+  --gk-stroke-strong: rgba(0, 0, 0, 0.24); /* hover + focus borders      */
+  --gk-brand-hairline: rgba(255, 255, 255, 0.16); /* rules on dark green */
+
+  /* Semantic ---------------------------------------------------------------
+     Risk and status stay monochrome — they're expressed through visual WEIGHT
+     (solid > outline > hairline > bare) rather than hue, so a table doesn't
+     turn into a traffic light. Brand green carries identity and affirmation
+     instead: dark green for inverted surfaces, pop green for "this worked". */
+  --gk-level-4: var(--gk-brand); /* critical */
+  --gk-level-3: rgba(0, 0, 0, 0.72); /* high     */
+  --gk-level-2: var(--gk-ink-secondary); /* medium   */
+  --gk-level-1: var(--gk-ink-tertiary); /* low      */
+
+  /* Geometry -------------------------------------------------------------- */
+  --gk-control-h: 48px; /* field + button height */
+  --gk-inset: 16px; /* control + card padding */
+
+  /* Geist Pixel variant selector -------------------------------------------
+     Figma says "Geist Pixel: Regular", but the family has no Regular — it
+     ships as square | grid | circle | triangle | line. Square is the most
+     legible at 12px, so it's the default.
+     To try another: change the import in app/layout.tsx AND the var below. */
+  --font-geist-pixel: var(--font-geist-pixel-square);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--gk-canvas);
+  --color-surface: var(--gk-surface);
+  --color-sunken: var(--gk-sunken);
+
+  --color-ink: var(--gk-ink);
+  --color-ink-secondary: var(--gk-ink-secondary);
+  --color-ink-tertiary: var(--gk-ink-tertiary);
+
+  --color-hairline: var(--gk-stroke);
+  --color-hairline-strong: var(--gk-stroke-strong);
+
+  --color-brand: var(--gk-brand);
+  --color-pop: var(--gk-pop);
+  --color-on-brand: var(--gk-on-brand);
+  --color-brand-hairline: var(--gk-brand-hairline);
+
+  --color-level-4: var(--gk-level-4);
+  --color-level-3: var(--gk-level-3);
+  --color-level-2: var(--gk-level-2);
+  --color-level-1: var(--gk-level-1);
+
+  /* Host Grotesk for headings, Geist Pixel for UI chrome — exactly how the
+     login screen splits them. Both are loaded in app/layout.tsx. */
+  --font-display: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-geist-pixel), ui-monospace, SFMono-Regular, monospace;
+
+  --text-ui: 12px; /* every label, button, cell and badge in the design */
+  --text-title: 20px; /* "Start Gatekeeping" */
+
+  --spacing-control: var(--gk-control-h);
+  --spacing-inset: var(--gk-inset);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---------------------------------------------------------------------------
+   Base
+
+   These MUST live in @layer base. Unlayered CSS outranks Tailwind's layered
+   utilities, so an unlayered `input { font: inherit }` silently beats
+   `font-ui` / `text-ui` on every input in the app.
+   --------------------------------------------------------------------------- */
+@layer base {
+  body {
+    background: var(--gk-canvas);
+    color: var(--gk-ink);
+    font-family: var(--font-host-grotesk), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The design has no rounded corners anywhere. Enforce it rather than
+     relying on every component remembering. */
+  *,
+  *::before,
+  *::after {
+    border-radius: 0;
+  }
+
+  /* Inputs inherit the page's type instead of the UA's. */
+  input,
+  button,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+    background: none;
+  }
+
+  ::placeholder {
+    color: var(--gk-ink-tertiary);
+    opacity: 1;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--gk-ink);
+    outline-offset: -1px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* The offboarding report is a compliance artifact — make it print cleanly. */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
 }

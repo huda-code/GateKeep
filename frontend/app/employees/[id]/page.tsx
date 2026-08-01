@@ -1,36 +1,62 @@
 "use client";
 
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  EmployeeAccount,
-  EmployeeDetail,
+  Badge,
+  Verified,
+  riskLevel,
+  scoreLevel,
+  statusLevel,
+} from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Caption, PanelTitle } from "@/components/ui/Panel";
+import { PageHeader, Shell } from "@/components/ui/Shell";
+import { Stat } from "@/components/ui/Stat";
+import { Table, Td, Th, Tr } from "@/components/ui/Table";
+import {
+  getAssets,
+  getAuditEvents,
   getEmployee,
   getEmployeeAccounts,
   reactivateEmployee,
   restoreAccount,
   revokeAccount,
-  terminateEmployee,
   verifyAccount,
+  type AuditEvent,
+  type CompanyAsset,
+  type EmployeeAccount,
+  type EmployeeDetail,
 } from "@/lib/api";
+import { ActivityLog } from "./ActivityLog";
+import { AssetsPanel } from "./AssetsPanel";
+
+const RISK_ORDER = ["critical", "high", "medium", "low"];
+
+function byRisk(a: EmployeeAccount, b: EmployeeAccount) {
+  const rank =
+    RISK_ORDER.indexOf(a.risk_level.toLowerCase()) -
+    RISK_ORDER.indexOf(b.risk_level.toLowerCase());
+
+  return rank !== 0 ? rank : a.platform.localeCompare(b.platform);
+}
 
 export default function EmployeePage() {
   const params = useParams<{ id: string }>();
   const employeeId = params.id;
 
-  const [employee, setEmployee] =
-    useState<EmployeeDetail | null>(null);
-
-  const [accounts, setAccounts] = useState<EmployeeAccount[]>(
-    []
-  );
-
+  const [employee, setEmployee] = useState<EmployeeDetail | null>(null);
+  const [accounts, setAccounts] = useState<EmployeeAccount[]>([]);
+  const [assets, setAssets] = useState<CompanyAsset[]>([]);
+  const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionMessage, setActionMessage] = useState("");
-  const [terminating, setTerminating] = useState(false);
+  const [message, setMessage] = useState("");
+  const [busyAccount, setBusyAccount] = useState<number | null>(null);
+  const [reactivating, setReactivating] = useState(false);
 
-  async function loadEmployee() {
+  const load = useCallback(async () => {
     const token = localStorage.getItem("gatekeep_token");
 
     if (!token) {
@@ -38,434 +64,324 @@ export default function EmployeePage() {
       return;
     }
 
-    const [employeeResponse, accountsResponse] =
-      await Promise.all([
-        getEmployee(token, employeeId),
-        getEmployeeAccounts(token, employeeId),
-      ]);
+    const [
+      employeeResponse,
+      accountsResponse,
+      assetsResponse,
+      eventsResponse,
+    ] = await Promise.all([
+      getEmployee(token, employeeId),
+      getEmployeeAccounts(token, employeeId),
+      getAssets(token, employeeId),
+      getAuditEvents(token, employeeId),
+    ]);
 
     setEmployee(employeeResponse);
-    setAccounts(accountsResponse);
-  }
+    setAccounts([...accountsResponse].sort(byRisk));
+    setAssets(assetsResponse);
+    setEvents(eventsResponse);
+  }, [employeeId]);
 
   useEffect(() => {
-    loadEmployee()
-      .catch(() => {
-        setActionMessage("Failed to load employee");
-      })
-      .finally(() => setLoading(false));
-  }, [employeeId]);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        await load();
+      } catch {
+        if (!cancelled) setMessage("Failed to load employee");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
 
   async function handleRevoke(accountId: number) {
     const token = localStorage.getItem("gatekeep_token");
+    if (!token) return;
 
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    setActionMessage("Revoking account...");
+    setBusyAccount(accountId);
 
     try {
       await revokeAccount(token, accountId);
-      const verification = await verifyAccount(
-        token,
-        accountId
-      );
+      const verification = await verifyAccount(token, accountId);
 
-      setActionMessage(
+      setMessage(
         verification.verified
-          ? "Account revoked and verified."
-          : "Account changed, but verification failed."
+          ? "Access revoked and verified closed."
+          : "Access changed, but verification did not pass."
       );
 
-      await loadEmployee();
+      await load();
     } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to revoke account"
+      setMessage(
+        error instanceof Error ? error.message : "Failed to revoke access"
       );
+    } finally {
+      setBusyAccount(null);
     }
   }
 
   async function handleRestore(accountId: number) {
-    const approved = window.confirm(
-      "Restore this account? Old sessions and credentials will remain revoked."
-    );
-
-    if (!approved) {
-      return;
-    }
-
     const token = localStorage.getItem("gatekeep_token");
+    if (!token) return;
 
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    setActionMessage("Restoring account access...");
+    setBusyAccount(accountId);
 
     try {
       const result = await restoreAccount(token, accountId);
-      setActionMessage(result.message);
-      await loadEmployee();
+      setMessage(result.message);
+      await load();
     } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to restore account"
-      );
-    }
-  }
-
-  async function handleTerminate() {
-    const approved = window.confirm(
-      `Terminate ${employee?.full_name} and revoke all remaining access?`
-    );
-
-    if (!approved) {
-      return;
-    }
-
-    const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    setTerminating(true);
-    setActionMessage("Executing secure termination...");
-
-    try {
-      const result = await terminateEmployee(
-        token,
-        employeeId
-      );
-
-      setActionMessage(
-        `Termination ${result.status}. ${result.summary.accounts_revoked} accounts revoked, ${result.summary.sessions_terminated} sessions terminated, and ${result.summary.tokens_revoked} credentials revoked.`
-      );
-
-      await loadEmployee();
-    } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Termination failed"
+      setMessage(
+        error instanceof Error ? error.message : "Failed to restore access"
       );
     } finally {
-      setTerminating(false);
+      setBusyAccount(null);
     }
   }
 
   async function handleReactivate() {
-    const approved = window.confirm(
-      `Reactivate ${employee?.full_name}? Accounts will be restored, but old sessions and credentials will remain revoked.`
-    );
-
-    if (!approved) {
-      return;
-    }
-
     const token = localStorage.getItem("gatekeep_token");
+    if (!token) return;
 
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    setActionMessage("Reactivating employee...");
+    setReactivating(true);
 
     try {
-      const result = await reactivateEmployee(
-        token,
-        employeeId
-      );
-
-      setActionMessage(result.message);
-      await loadEmployee();
+      const result = await reactivateEmployee(token, employeeId);
+      setMessage(result.message);
+      await load();
     } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Failed to reactivate employee"
+      setMessage(
+        error instanceof Error ? error.message : "Failed to reactivate employee"
       );
+    } finally {
+      setReactivating(false);
     }
   }
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 p-10 text-white">
-        Loading employee...
-      </main>
+      <Shell>
+        <Caption>Loading employee…</Caption>
+      </Shell>
     );
   }
 
   if (!employee) {
     return (
-      <main className="min-h-screen bg-slate-950 p-10 text-white">
-        Employee not found.
-      </main>
+      <Shell>
+        <PanelTitle>Employee not found</PanelTitle>
+        <Caption className="mt-2">{message}</Caption>
+      </Shell>
     );
   }
 
+  const terminated = employee.employment_status === "terminated";
+
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 bg-slate-900">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link href="/dashboard" className="text-2xl font-bold">
-            GateKeep
-          </Link>
+    <Shell
+      actions={
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
+        >
+          <ArrowLeft size={12} strokeWidth={2} />
+          Directory
+        </Link>
+      }
+    >
+      <PageHeader
+        title={employee.full_name}
+        subtitle={`${employee.department} · ${employee.job_title} · Manager: ${employee.manager_name || "Not assigned"}`}
+        actions={
+          terminated ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={reactivating}
+                onClick={handleReactivate}
+              >
+                {reactivating ? "Reactivating" : "Reactivate"}
+              </Button>
 
-          <Link
-            href="/dashboard"
-            className="text-sm text-slate-300 hover:text-white"
-          >
-            Back to directory
-          </Link>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-7xl px-6 py-10">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <p className="text-sm text-cyan-400">
-              Employee access profile
-            </p>
-
-            <h1 className="mt-2 text-4xl font-bold">
-              {employee.full_name}
-            </h1>
-
-            <p className="mt-2 text-slate-400">
-              {employee.department} · {employee.job_title}
-            </p>
-
-            <p className="mt-1 text-slate-500">
-              Manager: {employee.manager_name || "Not assigned"}
-            </p>
-          </div>
-
-          {employee.employment_status === "terminated" ? (
-            <button
-              onClick={handleReactivate}
-              className="rounded-lg bg-emerald-500 px-5 py-3 font-semibold text-white hover:bg-emerald-400"
-            >
-              Reactivate Employee
-            </button>
+              <Link
+                href={`/employees/${employeeId}/report`}
+                className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
+              >
+                View report
+                <ArrowRight size={12} strokeWidth={2} />
+              </Link>
+            </>
           ) : (
-            <button
-              onClick={handleTerminate}
-              disabled={terminating}
-              className="rounded-lg bg-red-500 px-5 py-3 font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+            <Link
+              href={`/employees/${employeeId}/offboard`}
+              className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
             >
-              {terminating
-                ? "Terminating..."
-                : "Terminate Employee"}
-            </button>
-          )}
-        </div>
+              Offboard employee
+              <ArrowRight size={12} strokeWidth={2} />
+            </Link>
+          )
+        }
+      />
 
-        {actionMessage && (
-          <div className="mt-6 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4 text-cyan-200">
-            {actionMessage}
-          </div>
-        )}
+      {message ? (
+        <Caption className="mt-6 bg-surface p-inset text-ink">
+          {message}
+        </Caption>
+      ) : null}
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            label="Risk score"
-            value={`${employee.risk_score}/100`}
+      <div className="mt-8 grid gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
+        <Stat
+          label="Risk score"
+          value={employee.risk_score}
+          hint={`${employee.risk_level} · out of 100`}
+          emphasis={scoreLevel(employee.risk_score) === 4}
+        />
+        <Stat label="Active accounts" value={employee.active_accounts} />
+        <Stat label="Active sessions" value={employee.active_sessions} />
+        <Stat label="Active credentials" value={employee.active_credentials} />
+      </div>
+
+      <section className="mt-10 bg-surface p-inset">
+        <PanelTitle>Employee information</PanelTitle>
+
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
+          <Info label="Company email" value={employee.company_email} />
+          <Info
+            label="Personal email"
+            value={employee.personal_email || "Not provided"}
           />
-
-          <Metric
-            label="Active accounts"
-            value={String(employee.active_accounts)}
+          <Info
+            label="Employment status"
+            value={employee.employment_status.replace("_", " ")}
           />
-
-          <Metric
-            label="Active sessions"
-            value={String(employee.active_sessions)}
+          <Info
+            label="Start date"
+            value={employee.start_date || "Not provided"}
           />
-
-          <Metric
-            label="Active credentials"
-            value={String(employee.active_credentials)}
+          <Info label="Owned assets" value={String(employee.owned_assets)} />
+          <Info
+            label="Last access review"
+            value={
+              employee.last_access_review
+                ? new Date(employee.last_access_review).toLocaleDateString()
+                : "Never reviewed"
+            }
           />
-        </div>
-
-        <div className="mt-10 rounded-xl border border-slate-800 bg-slate-900 p-6">
-          <h2 className="text-xl font-semibold">
-            Employee information
-          </h2>
-
-          <div className="mt-5 grid gap-5 md:grid-cols-3">
-            <Info
-              label="Company email"
-              value={employee.company_email}
-            />
-
-            <Info
-              label="Personal email"
-              value={employee.personal_email || "Not provided"}
-            />
-
-            <Info
-              label="Employment status"
-              value={employee.employment_status}
-            />
-
-            <Info
-              label="Start date"
-              value={employee.start_date || "Not provided"}
-            />
-
-            <Info
-              label="Owned assets"
-              value={String(employee.owned_assets)}
-            />
-
-            <Info
-              label="Last access review"
-              value={
-                employee.last_access_review
-                  ? new Date(
-                      employee.last_access_review
-                    ).toLocaleDateString()
-                  : "Not reviewed"
-              }
-            />
-          </div>
-        </div>
-
-        <div className="mt-10">
-          <div>
-            <h2 className="text-2xl font-bold">
-              Connected accounts
-            </h2>
-
-            <p className="mt-2 text-slate-400">
-              Revoke access individually or terminate all access.
-            </p>
-          </div>
-
-          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full min-w-[950px] text-left">
-              <thead className="bg-slate-900 text-sm text-slate-400">
-                <tr>
-                  <th className="px-5 py-4">Platform</th>
-                  <th className="px-5 py-4">Identifier</th>
-                  <th className="px-5 py-4">Access</th>
-                  <th className="px-5 py-4">Risk</th>
-                  <th className="px-5 py-4">Sessions</th>
-                  <th className="px-5 py-4">Credentials</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Action</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {accounts.map((account) => (
-                  <tr
-                    key={account.id}
-                    className="border-t border-slate-800"
-                  >
-                    <td className="px-5 py-4 font-medium">
-                      {account.platform}
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-400">
-                      {account.identifier}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {account.access_level}
-                    </td>
-
-                    <td className="px-5 py-4 capitalize">
-                      {account.risk_level}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {account.active_sessions}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {account.active_credentials}
-                    </td>
-
-                    <td className="px-5 py-4 capitalize">
-                      {account.status}
-                      {account.revocation_verified && (
-                        <span className="ml-2 text-emerald-400">
-                          Verified
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      {account.status === "active" ? (
-                        <button
-                          onClick={() =>
-                            handleRevoke(account.id)
-                          }
-                          className="rounded-lg border border-red-500/50 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10"
-                        >
-                          Revoke
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            handleRestore(account.id)
-                          }
-                          className="rounded-lg border border-emerald-500/50 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/10"
-                        >
-                          Restore Access
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       </section>
-    </main>
-  );
-}
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-      <div className="text-sm text-slate-400">{label}</div>
-      <div className="mt-2 text-3xl font-bold">{value}</div>
-    </div>
-  );
-}
+      <section className="mt-10">
+        <PanelTitle>Connected accounts</PanelTitle>
 
-function Info({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div>
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 capitalize text-slate-200">
-        {value}
+        <Caption className="mt-2 text-ink-tertiary">
+          Sorted by risk. Revoke individually, or offboard to close every path
+          at once.
+        </Caption>
+
+        <div className="mt-4">
+          <Table
+            minWidth={980}
+            head={
+              <>
+                <Th>Platform</Th>
+                <Th>Identifier</Th>
+                <Th>Access</Th>
+                <Th>Risk</Th>
+                <Th>Sessions</Th>
+                <Th>Credentials</Th>
+                <Th>Status</Th>
+                <Th />
+              </>
+            }
+          >
+            {accounts.map((account) => {
+              const isActive = account.status === "active";
+
+              return (
+                <Tr key={account.id}>
+                  <Td>
+                    <span className="font-display text-[16px] text-ink">
+                      {account.platform}
+                    </span>
+                  </Td>
+
+                  <Td className="text-ink-tertiary">{account.identifier}</Td>
+
+                  <Td className="text-ink-secondary">
+                    {account.access_level}
+                  </Td>
+
+                  <Td>
+                    <Badge level={riskLevel(account.risk_level)}>
+                      {account.risk_level}
+                    </Badge>
+                  </Td>
+
+                  <Td>{account.active_sessions}</Td>
+
+                  <Td>{account.active_credentials}</Td>
+
+                  <Td>
+                    <div className="flex items-center gap-3">
+                      <Badge level={statusLevel(account.status)}>
+                        {account.status}
+                      </Badge>
+
+                      {account.revocation_verified ? <Verified /> : null}
+                    </div>
+                  </Td>
+
+                  <Td>
+                    <Button
+                      variant="bare"
+                      disabled={busyAccount === account.id}
+                      onClick={() =>
+                        isActive
+                          ? handleRevoke(account.id)
+                          : handleRestore(account.id)
+                      }
+                      className="h-auto px-0"
+                    >
+                      {busyAccount === account.id
+                        ? "Working"
+                        : isActive
+                          ? "Revoke"
+                          : "Restore"}
+                    </Button>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </Table>
+        </div>
+      </section>
+
+      <div className="mt-10">
+        <AssetsPanel
+          assets={assets}
+          managerName={employee.manager_name}
+          onChange={load}
+        />
       </div>
+
+      <div className="mt-10">
+        <ActivityLog events={events} />
+      </div>
+    </Shell>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-ui text-ui text-ink-tertiary">{label}</span>
+      <span className="font-ui text-ui text-ink">{value}</span>
     </div>
   );
 }
