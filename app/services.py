@@ -64,6 +64,30 @@ def revoke_account(db: Session, a: EmployeeAccount, actor: str, reason: str, req
     audit(db,a.employee_id,actor,f'{action}_account',a.platform,'verified',f'{reason}; identifier={a.identifier}')
     return serialize_account(a)
 
+def restore_account(db: Session, a: EmployeeAccount, actor: str, reason: str = "Accidental revocation"):
+    if a.status == "active":
+        return serialize_account(a)
+
+    a.status = "active"
+    a.revocation_verified = False
+    a.updated_at = utcnow()
+
+    # Old sessions and credentials remain revoked.
+    # Restoring the account does not reactivate old tokens.
+    db.commit()
+
+    audit(
+        db,
+        a.employee_id,
+        actor,
+        "restore_account",
+        a.platform,
+        "completed",
+        f"{reason}; identifier={a.identifier}; old sessions and credentials remain revoked",
+    )
+
+    return serialize_account(a)
+
 def termination_preview(e: Employee):
     active=[a for a in e.accounts if a.status=='active']
     return {'employee_id':e.id,'employee':e.full_name,'accounts_discovered':len(active),'active_sessions':sum(1 for a in active for s in a.sessions if s.active),'active_credentials':sum(1 for a in active for c in a.credentials if c.status=='active'),'company_cards':sum(1 for x in e.assets if x.asset_type=='company_card' and x.status=='active'),'owned_assets':len(e.assets),'actions':[{'account_id':a.id,'platform':a.platform,'identifier':a.identifier,'planned_action':'freeze' if a.account_type=='company_card' else 'revoke'} for a in active]}

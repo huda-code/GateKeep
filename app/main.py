@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import Base, engine, get_db
 from app.models import AuditEvent, CompanyAsset, Employee, EmployeeAccount, TerminationRun
 from app.schemas import AccountCreate, AssetTransferRequest, EmployeeCreate, EmployeePatch, LoginRequest, RevokeRequest, TerminationRequest
-from app.services import add_account, audit, auto_provision, employee_detail, employee_summary, reset_demo, revoke_account, serialize_account, terminate, termination_preview, utcnow
+from app.services import add_account, audit, auto_provision, employee_detail, employee_summary, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
 
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title='GateKeep API',version='2.0.0')
@@ -67,6 +67,19 @@ def account_revoke(account_id:int,payload:RevokeRequest,db:Session=Depends(get_d
     a=db.get(EmployeeAccount,account_id)
     if not a: raise HTTPException(404,'Account not found')
     return revoke_account(db,a,user['email'],payload.reason,payload.action)
+@app.post('/api/v1/accounts/{account_id}/restore')
+def account_restore(account_id:int,db:Session=Depends(get_db),user=Depends(require_admin)):
+    a=db.get(EmployeeAccount,account_id)
+    if not a: raise HTTPException(404,'Account not found')
+    if a.status=='active': raise HTTPException(400,'Account is already active')
+    restored=restore_account(db,a,user['email'])
+    return {
+        **restored,
+        'sessions_restored':False,
+        'credentials_restored':False,
+        'message':'Account restored. Previous sessions and credentials remain revoked.'
+    }
+
 @app.post('/api/v1/accounts/{account_id}/verify')
 def account_verify(account_id:int,db:Session=Depends(get_db),user=Depends(require_admin)):
     a=db.get(EmployeeAccount,account_id)
