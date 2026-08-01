@@ -306,3 +306,61 @@ export async function createEmployee(
     body: JSON.stringify(input),
   });
 }
+
+
+export type GaryAgentStep = {
+  sequence: number;
+  stage:
+    | "parse"
+    | "resolve"
+    | "plan"
+    | "execute"
+    | "verify"
+    | "report";
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "verified"
+    | "failed"
+    | "needs_input";
+  message: string;
+  evidence: Record<string, unknown>;
+};
+
+export type GaryAgentResult = {
+  run_id: string;
+  intent:
+    | "onboard_employee"
+    | "offboard_employee"
+    | "unknown";
+  status:
+    | "planned"
+    | "completed"
+    | "failed"
+    | "needs_input";
+  employee_id: number | null;
+  employee_name: string | null;
+  confidence: number;
+  steps: GaryAgentStep[];
+  summary: Record<string, unknown>;
+  message: string;
+};
+
+export async function runGaryAgent(
+  token: string,
+  instruction: string,
+  autoExecute = true,
+): Promise<GaryAgentResult> {
+  return apiRequest<GaryAgentResult>(
+    "/api/v1/agent/run",
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        instruction,
+        auto_execute: autoExecute,
+      }),
+    },
+  );
+}
