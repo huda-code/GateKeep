@@ -217,3 +217,40 @@ export async function terminateEmployee(
     }),
   });
 }
+
+export async function restoreAccount(
+  token: string,
+  accountId: number
+) {
+  return apiRequest<{
+    id: number;
+    employee_id: number;
+    platform: string;
+    identifier: string;
+    status: string;
+    revocation_verified: boolean;
+    sessions_restored: boolean;
+    credentials_restored: boolean;
+    message: string;
+  }>(`/api/v1/accounts/${accountId}/restore`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export async function reactivateEmployee(
+  token: string,
+  employeeId: string
+) {
+  return apiRequest<{
+    status: string;
+    employee: EmployeeDetail;
+    accounts_restored: number;
+    sessions_restored: boolean;
+    credentials_restored: boolean;
+    message: string;
+  }>(`/api/v1/employees/${employeeId}/reactivate`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}

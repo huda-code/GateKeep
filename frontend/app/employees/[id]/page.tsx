@@ -8,6 +8,8 @@ import {
   EmployeeDetail,
   getEmployee,
   getEmployeeAccounts,
+  reactivateEmployee,
+  restoreAccount,
   revokeAccount,
   terminateEmployee,
   verifyAccount,
@@ -87,6 +89,37 @@ export default function EmployeePage() {
     }
   }
 
+  async function handleRestore(accountId: number) {
+    const approved = window.confirm(
+      "Restore this account? Old sessions and credentials will remain revoked."
+    );
+
+    if (!approved) {
+      return;
+    }
+
+    const token = localStorage.getItem("gatekeep_token");
+
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    setActionMessage("Restoring account access...");
+
+    try {
+      const result = await restoreAccount(token, accountId);
+      setActionMessage(result.message);
+      await loadEmployee();
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to restore account"
+      );
+    }
+  }
+
   async function handleTerminate() {
     const approved = window.confirm(
       `Terminate ${employee?.full_name} and revoke all remaining access?`
@@ -125,6 +158,41 @@ export default function EmployeePage() {
       );
     } finally {
       setTerminating(false);
+    }
+  }
+
+  async function handleReactivate() {
+    const approved = window.confirm(
+      `Reactivate ${employee?.full_name}? Accounts will be restored, but old sessions and credentials will remain revoked.`
+    );
+
+    if (!approved) {
+      return;
+    }
+
+    const token = localStorage.getItem("gatekeep_token");
+
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    setActionMessage("Reactivating employee...");
+
+    try {
+      const result = await reactivateEmployee(
+        token,
+        employeeId
+      );
+
+      setActionMessage(result.message);
+      await loadEmployee();
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to reactivate employee"
+      );
     }
   }
 
@@ -181,20 +249,24 @@ export default function EmployeePage() {
             </p>
           </div>
 
-          <button
-            onClick={handleTerminate}
-            disabled={
-              terminating ||
-              employee.employment_status === "terminated"
-            }
-            className="rounded-lg bg-red-500 px-5 py-3 font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {terminating
-              ? "Terminating..."
-              : employee.employment_status === "terminated"
-                ? "Employee terminated"
+          {employee.employment_status === "terminated" ? (
+            <button
+              onClick={handleReactivate}
+              className="rounded-lg bg-emerald-500 px-5 py-3 font-semibold text-white hover:bg-emerald-400"
+            >
+              Reactivate Employee
+            </button>
+          ) : (
+            <button
+              onClick={handleTerminate}
+              disabled={terminating}
+              className="rounded-lg bg-red-500 px-5 py-3 font-semibold text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {terminating
+                ? "Terminating..."
                 : "Terminate Employee"}
-          </button>
+            </button>
+          )}
         </div>
 
         {actionMessage && (
@@ -335,17 +407,25 @@ export default function EmployeePage() {
                     </td>
 
                     <td className="px-5 py-4">
-                      <button
-                        onClick={() =>
-                          handleRevoke(account.id)
-                        }
-                        disabled={account.status !== "active"}
-                        className="rounded-lg border border-red-500/50 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        {account.status === "active"
-                          ? "Revoke"
-                          : "Revoked"}
-                      </button>
+                      {account.status === "active" ? (
+                        <button
+                          onClick={() =>
+                            handleRevoke(account.id)
+                          }
+                          className="rounded-lg border border-red-500/50 px-3 py-2 text-sm text-red-300 hover:bg-red-500/10"
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            handleRestore(account.id)
+                          }
+                          className="rounded-lg border border-emerald-500/50 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/10"
+                        >
+                          Restore Access
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
