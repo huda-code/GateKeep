@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import Base, engine, get_db
 from app.models import AuditEvent, CompanyAsset, Employee, EmployeeAccount, TerminationRun
 from app.schemas import AccountCreate, AssetTransferRequest, EmployeeCreate, EmployeePatch, LoginRequest, RevokeRequest, TerminationRequest
-from app.services import add_account, audit, auto_provision, employee_detail, employee_summary, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
+from app.services import add_account, audit, auto_provision, employee_detail, employee_summary, reactivate_employee, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
 
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title='GateKeep API',version='2.0.0')
@@ -87,6 +87,16 @@ def account_verify(account_id:int,db:Session=Depends(get_db),user=Depends(requir
     remaining_sessions=any(s.active for s in a.sessions); remaining_credentials=any(c.status=='active' for c in a.credentials)
     verified=a.status in {'revoked','frozen','cancelled','disabled'} and not remaining_sessions and not remaining_credentials
     a.revocation_verified=verified; db.commit(); audit(db,a.employee_id,user['email'],'verify_account',a.platform,'verified' if verified else 'failed',a.identifier); return {'account_id':a.id,'verified':verified,'status':a.status,'remaining_sessions':remaining_sessions,'remaining_credentials':remaining_credentials}
+
+@app.post('/api/v1/employees/{employee_id}/reactivate')
+def reactivate_terminated_employee(
+    employee_id:int,
+    db:Session=Depends(get_db),
+    user=Depends(require_admin)
+):
+    e=db.get(Employee,employee_id)
+    if not e: raise HTTPException(404,'Employee not found')
+    return reactivate_employee(db,e,user['email'])
 
 @app.post('/api/v1/employees/{employee_id}/termination/preview')
 def preview(employee_id:int,db:Session=Depends(get_db),user=Depends(require_admin)):

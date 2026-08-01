@@ -88,6 +88,63 @@ def restore_account(db: Session, a: EmployeeAccount, actor: str, reason: str = "
 
     return serialize_account(a)
 
+def reactivate_employee(db: Session, e: Employee, actor: str):
+    if e.employment_status == "active":
+        return {
+            "status": "already_active",
+            "employee": employee_detail(e),
+            "accounts_restored": 0,
+        }
+
+    restored_count = 0
+
+    for account in e.accounts:
+        if account.status != "active":
+            restore_account(
+                db,
+                account,
+                actor,
+                "Employee reactivated",
+            )
+            restored_count += 1
+
+    for asset in e.assets:
+        if asset.asset_type == "company_card" and asset.status == "frozen":
+            asset.status = "active"
+
+        if asset.asset_type != "company_card":
+            asset.assigned_to = None
+
+    e.employment_status = "active"
+    e.termination_date = None
+    e.updated_at = utcnow()
+
+    db.commit()
+    db.refresh(e)
+
+    audit(
+        db,
+        e.id,
+        actor,
+        "reactivate_employee",
+        e.company_email,
+        "completed",
+        f"Restored {restored_count} accounts; old sessions and credentials remain revoked",
+    )
+
+    return {
+        "status": "reactivated",
+        "employee": employee_detail(e),
+        "accounts_restored": restored_count,
+        "sessions_restored": False,
+        "credentials_restored": False,
+        "message": (
+            "Employee reactivated. Accounts were restored, but old "
+            "sessions and credentials remain revoked."
+        ),
+    }
+
+
 def termination_preview(e: Employee):
     active=[a for a in e.accounts if a.status=='active']
     return {'employee_id':e.id,'employee':e.full_name,'accounts_discovered':len(active),'active_sessions':sum(1 for a in active for s in a.sessions if s.active),'active_credentials':sum(1 for a in active for c in a.credentials if c.status=='active'),'company_cards':sum(1 for x in e.assets if x.asset_type=='company_card' and x.status=='active'),'owned_assets':len(e.assets),'actions':[{'account_id':a.id,'platform':a.platform,'identifier':a.identifier,'planned_action':'freeze' if a.account_type=='company_card' else 'revoke'} for a in active]}
