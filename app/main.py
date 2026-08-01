@@ -10,6 +10,8 @@ from app.db import Base, engine, get_db
 from app.models import AuditEvent, CompanyAsset, Employee, EmployeeAccount, TerminationRun
 from app.schemas import AccountCreate, AssetTransferRequest, EmployeeCreate, EmployeePatch, LoginRequest, RevokeRequest, TerminationRequest
 from app.services import ACCESS_TEMPLATES, add_account, audit, auto_provision, employee_detail, employee_summary, reactivate_employee, reset_demo, restore_account, revoke_account, serialize_account, terminate, termination_preview, utcnow
+from app.agent.orchestrator import run_agent
+from app.agent.schemas import AgentRunRequest, AgentRunResponse
 
 Base.metadata.create_all(bind=engine)
 app=FastAPI(title='GateKeep API',version='2.0.0')
@@ -158,3 +160,20 @@ def audit_events(employee_id:int,db:Session=Depends(get_db),user=Depends(require
     if not db.get(Employee,employee_id): raise HTTPException(404,'Employee not found')
     rows=db.scalars(select(AuditEvent).where(AuditEvent.employee_id==employee_id).order_by(AuditEvent.created_at.desc())).all()
     return [{'id':r.id,'actor':r.actor,'action':r.action,'target':r.target,'result':r.result,'detail':r.detail,'created_at':r.created_at} for r in rows]
+
+
+@app.post(
+    "/api/v1/agent/run",
+    response_model=AgentRunResponse,
+)
+def run_gatekeep_agent(
+    payload: AgentRunRequest,
+    db: Session = Depends(get_db),
+    user = Depends(require_admin),
+):
+    return run_agent(
+        db,
+        instruction=payload.instruction,
+        auto_execute=payload.auto_execute,
+        actor=user["email"],
+    )
