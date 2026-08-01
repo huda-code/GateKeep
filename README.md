@@ -1,33 +1,44 @@
-# GateKeep Backend v2
+# GateKeep
 
-FastAPI + SQLite backend for the GateKeep hackathon demo.
+**One employee out. Every access path closed.**
 
-## Features
-- Dummy admin login using a backend-issued Bearer token
-- Employee directory and employee profiles
-- Department-based sample account provisioning
-- Account, asset, session and credential inventory
-- Granular revoke/freeze/cancel actions with verification
-- Full employee termination preview and execution
-- Audit events and termination report
-- Synthetic demo data only
+GateKeep is an AI-assisted employee identity lifecycle platform for onboarding, access provisioning, and secure offboarding.
 
-## Run
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
-python -m uvicorn app.main:app --reload --port 8000
-```
+Its built-in agent, **Gary**, accepts a natural-language request, identifies whether the request is onboarding or offboarding, creates an execution plan, performs the workflow, verifies the final state, and produces proof of completion.
 
-Open http://127.0.0.1:8000/docs
+## The problem
 
-## Demo login
-- Email: `admin@gatekeep.demo`
-- Password: `admin123`
+Employee onboarding and offboarding are often handled through tickets, spreadsheets, Slack messages, and manual checklists.
 
-## Reset demo data
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/demo/reset
-```
+For onboarding, IT teams must:
+
+- Create the employee record
+- Determine access based on role
+- Provision accounts across multiple platforms
+- Confirm that each account was created correctly
+
+For offboarding, they must:
+
+- Find every account owned by the employee
+- Revoke application access
+- Terminate active sessions
+- Revoke credentials and API tokens
+- Freeze company cards
+- Transfer company assets
+- Verify that no access remains
+- Produce an audit record
+
+A single missed account or credential can become a serious security and compliance risk.
+
+GateKeep automates this process end to end.
+
+## Gary, the GateKeep agent
+
+Gary allows an administrator to paste a plain-English instruction and run the complete workflow with one click.
+
+### Onboarding example
+
+```text
+Add Aisha Rahman as a product designer.
+Her email is aisha.rahman@company.com.
+Her manager is Alex Morgan.
