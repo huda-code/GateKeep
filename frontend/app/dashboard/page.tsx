@@ -86,9 +86,12 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <button className="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950">
+          <Link
+            href="/employees/new"
+            className="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
             Add New Employee
-          </button>
+          </Link>
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

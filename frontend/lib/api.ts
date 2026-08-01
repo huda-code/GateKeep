@@ -254,3 +254,55 @@ export async function reactivateEmployee(
     headers: authHeaders(token),
   });
 }
+
+
+export type AccessTemplate = {
+  key: string;
+  name: string;
+  department: string;
+  description: string;
+  accounts: Array<{
+    platform: string;
+    access: string;
+    risk: string;
+    sessions: number;
+    credentials: string[];
+  }>;
+};
+
+export type CreateEmployeeInput = {
+  full_name: string;
+  company_email: string;
+  personal_email?: string;
+  department: string;
+  job_title: string;
+  manager_name?: string;
+  start_date?: string;
+  employment_status: string;
+  github_username?: string;
+  microsoft_username?: string;
+  google_workspace_email?: string;
+  auto_provision: boolean;
+  access_template: string;
+};
+
+export async function getAccessTemplates(token: string) {
+  return apiRequest<AccessTemplate[]>(
+    "/api/v1/access-templates",
+    {
+      headers: authHeaders(token),
+      cache: "no-store",
+    }
+  );
+}
+
+export async function createEmployee(
+  token: string,
+  input: CreateEmployeeInput
+) {
+  return apiRequest<EmployeeDetail>("/api/v1/employees", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
