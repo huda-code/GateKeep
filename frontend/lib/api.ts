@@ -1,5 +1,7 @@
+// Matches the port in the backend README (`uvicorn --port 8000`).
+// Override with NEXT_PUBLIC_API_URL in frontend/.env.local if you run it elsewhere.
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export type EmployeeSummary = {
   id: number;
@@ -170,6 +172,7 @@ export async function getTerminationPreview(
     actions: Array<{
       account_id: number;
       platform: string;
+      identifier: string;
       planned_action: string;
     }>;
   }>(
@@ -215,6 +218,91 @@ export async function terminateEmployee(
       remove_cloud_access: true,
       freeze_company_card: true,
     }),
+  });
+}
+
+export type TerminationSummary = Awaited<
+  ReturnType<typeof terminateEmployee>
+>["summary"];
+
+export type CompanyAsset = {
+  id: number;
+  asset_type: string;
+  provider: string;
+  identifier: string;
+  status: string;
+  metadata: Record<string, unknown>;
+  assigned_to: string | null;
+};
+
+export async function getAssets(token: string, employeeId: string) {
+  return apiRequest<CompanyAsset[]>(
+    `/api/v1/employees/${employeeId}/assets`,
+    { headers: authHeaders(token), cache: "no-store" }
+  );
+}
+
+export async function freezeAsset(token: string, assetId: number) {
+  return apiRequest<{ id: number; status: string }>(
+    `/api/v1/assets/${assetId}/freeze`,
+    { method: "POST", headers: authHeaders(token) }
+  );
+}
+
+export async function transferAsset(
+  token: string,
+  assetId: number,
+  assignedTo: string
+) {
+  return apiRequest<{
+    id: number;
+    status: string;
+    assigned_to: string;
+  }>(`/api/v1/assets/${assetId}/transfer`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ assigned_to: assignedTo }),
+  });
+}
+
+export type AuditEvent = {
+  id: number;
+  actor: string;
+  action: string;
+  target: string;
+  result: string;
+  detail: string;
+  created_at: string;
+};
+
+export async function getAuditEvents(
+  token: string,
+  employeeId: string
+) {
+  return apiRequest<AuditEvent[]>(
+    `/api/v1/employees/${employeeId}/audit-events`,
+    { headers: authHeaders(token), cache: "no-store" }
+  );
+}
+
+export async function getTerminationReport(
+  token: string,
+  employeeId: string
+) {
+  return apiRequest<{
+    employee: EmployeeDetail;
+    latest_termination: {
+      id: number;
+      actor: string;
+      effective_at: string;
+      status: string;
+      summary: TerminationSummary;
+      created_at: string;
+    } | null;
+    accounts: EmployeeAccount[];
+  }>(`/api/v1/employees/${employeeId}/termination-report`, {
+    headers: authHeaders(token),
+    cache: "no-store",
   });
 }
 

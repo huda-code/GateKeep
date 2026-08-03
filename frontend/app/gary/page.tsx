@@ -1,34 +1,77 @@
 "use client";
 
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Verified } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Caption, PanelTitle } from "@/components/ui/Panel";
+import { PageHeader, Shell } from "@/components/ui/Shell";
 import {
   GaryAgentResult,
+  GaryAgentStep,
   runGaryAgent,
 } from "@/lib/api";
 
-const ONBOARDING_EXAMPLE =
-  "Add Omar Hassan as a software engineer. His email is omar.hassan@company.com. His manager is Alex Morgan.";
+const EXAMPLES = [
+  {
+    label: "Onboarding",
+    text: "Add Omar Hassan as a software engineer. His email is omar.hassan@company.com. His manager is Alex Morgan.",
+  },
+  {
+    label: "Offboarding",
+    text: "Terminate Sarah Chen immediately. Revoke all access, preserve her mailbox, transfer her files to Alex Morgan, and freeze her company card.",
+  },
+];
 
-const OFFBOARDING_EXAMPLE =
-  "Terminate Sarah Chen immediately. Revoke all access, preserve her mailbox, transfer her files to Alex Morgan, and freeze her company card.";
+const STAGE_LABELS: Record<GaryAgentStep["stage"], string> = {
+  parse: "Understand the instruction",
+  resolve: "Resolve the employee",
+  plan: "Build the action plan",
+  execute: "Execute the workflow",
+  verify: "Verify the final state",
+  report: "Write the report",
+};
+
+/**
+ * Skeleton shown while Gary is working. The orchestrator currently emits
+ * parse/resolve/plan/execute/verify — never `report` — so listing a sixth row
+ * would show a step that can never complete. Once the run returns we render
+ * the stages it actually reported, so a new stage appears here on its own.
+ */
+const PENDING_STAGES: GaryAgentStep["stage"][] = [
+  "parse",
+  "resolve",
+  "plan",
+  "execute",
+  "verify",
+];
+
+const INTENT_LABELS: Record<GaryAgentResult["intent"], string> = {
+  onboard_employee: "Onboarding",
+  offboard_employee: "Offboarding",
+  unknown: "Unrecognised",
+};
+
+function titleCase(key: string) {
+  return key
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export default function GaryPage() {
   const [instruction, setInstruction] = useState("");
-  const [result, setResult] =
-    useState<GaryAgentResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GaryAgentResult | null>(null);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
+    if (!localStorage.getItem("gatekeep_token")) {
       window.location.href = "/login";
     }
   }, []);
 
-  async function handleRun() {
+  async function run() {
     const cleaned = instruction.trim();
 
     if (!cleaned) {
@@ -43,332 +86,236 @@ export default function GaryPage() {
       return;
     }
 
-    setLoading(true);
+    setRunning(true);
     setError("");
     setResult(null);
 
     try {
-      const response = await runGaryAgent(
-        token,
-        cleaned,
-        true
-      );
-
-      setResult(response);
-    } catch (error) {
+      setResult(await runGaryAgent(token, cleaned, true));
+    } catch (cause) {
       setError(
-        error instanceof Error
-          ? error.message
+        cause instanceof Error
+          ? cause.message
           : "Gary could not complete the request."
       );
     } finally {
-      setLoading(false);
+      setRunning(false);
     }
   }
 
-  const successful =
-    result?.status === "completed";
+  const steps = result?.steps ?? [];
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 bg-slate-900">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link
-            href="/dashboard"
-            className="text-2xl font-bold"
-          >
-            GateKeep
-          </Link>
+    <Shell
+      actions={
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
+        >
+          <ArrowLeft size={12} strokeWidth={2} />
+          Directory
+        </Link>
+      }
+    >
+      <PageHeader
+        title="Gary"
+        subtitle="Describe an onboarding or offboarding in plain language. Gary works out the intent, does it, and verifies the result."
+      />
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
-            >
-              Dashboard
-            </Link>
+      <div className="mt-8 bg-surface p-inset">
+        <label
+          htmlFor="instruction"
+          className="font-ui text-ui text-ink-tertiary"
+        >
+          Instruction
+        </label>
 
-            <Link
-              href="/employees/new"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
-            >
-              Add Employee
-            </Link>
-          </div>
-        </div>
-      </header>
+        <textarea
+          id="instruction"
+          rows={6}
+          value={instruction}
+          onChange={(event) => setInstruction(event.target.value)}
+          placeholder="Terminate Sarah Chen immediately. Revoke all access and freeze her company card."
+          className="mt-2 w-full resize-y border border-hairline p-inset font-ui text-ui leading-6 text-ink outline-none transition-colors focus:border-ink"
+        />
 
-      <section className="mx-auto max-w-5xl px-6 py-10">
-        <div className="rounded-3xl border border-cyan-400/20 bg-slate-900 p-8 shadow-2xl">
-          <div className="flex flex-wrap items-start justify-between gap-5">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-400">
-                GateKeep Agent
-              </div>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <span className="font-ui text-ui text-ink-tertiary">Try</span>
 
-              <h1 className="mt-3 text-4xl font-bold">
-                Gary
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-slate-400">
-                Paste an onboarding or offboarding request.
-                Gary will identify the action, execute it, and
-                verify the result.
-              </p>
-            </div>
-
-            <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-300">
-              Agent online
-            </div>
-          </div>
-
-          <label className="mt-8 block text-sm font-medium text-slate-300">
-            What should Gary do?
-          </label>
-
-          <textarea
-            value={instruction}
-            onChange={(event) =>
-              setInstruction(event.target.value)
-            }
-            rows={8}
-            placeholder="Example: Add Omar Hassan as a software engineer..."
-            className="mt-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-4 text-base leading-7 outline-none transition focus:border-cyan-400"
-          />
-
-          <div className="mt-4 flex flex-wrap gap-3">
+          {EXAMPLES.map((example) => (
             <button
+              key={example.label}
               type="button"
-              onClick={() =>
-                setInstruction(ONBOARDING_EXAMPLE)
-              }
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              onClick={() => setInstruction(example.text)}
+              className="font-ui text-ui text-ink-secondary underline decoration-hairline underline-offset-4 transition-colors hover:text-ink"
             >
-              Load onboarding example
+              {example.label}
             </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setInstruction(OFFBOARDING_EXAMPLE)
-              }
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
-            >
-              Load offboarding example
-            </button>
-          </div>
-
-          {error && (
-            <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleRun}
-            disabled={loading}
-            className="mt-6 w-full rounded-xl bg-cyan-400 px-5 py-4 text-lg font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Gary is working..." : "Run Agent"}
-          </button>
+          ))}
         </div>
 
-        {loading && (
-          <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <div className="font-semibold">
-              Gary is processing the request
-            </div>
+        {error ? <Caption className="mt-4 text-ink">{error}</Caption> : null}
 
-            <div className="mt-4 space-y-3 text-sm text-slate-400">
-              <div>1. Understanding instruction</div>
-              <div>2. Resolving employee</div>
-              <div>3. Building action plan</div>
-              <div>4. Executing workflow</div>
-              <div>5. Verifying final state</div>
-            </div>
+        <div className="mt-6">
+          <Button
+            variant="solid"
+            icon={ArrowRight}
+            disabled={running}
+            onClick={run}
+          >
+            {running ? "Gary is working" : "Run Gary"}
+          </Button>
+        </div>
+      </div>
+
+      {running || result ? (
+        <section className="mt-10">
+          <PanelTitle>
+            {running ? "Working" : "Execution timeline"}
+          </PanelTitle>
+
+          <div className="mt-4 bg-surface">
+            {steps.length > 0
+              ? [...steps]
+                  .sort((a, b) => a.sequence - b.sequence)
+                  .map((step, index) => (
+                    <StageRow
+                      key={`${step.sequence}-${step.stage}`}
+                      index={index}
+                      label={STAGE_LABELS[step.stage] ?? step.stage}
+                      step={step}
+                    />
+                  ))
+              : PENDING_STAGES.map((stage, index) => (
+                  <StageRow
+                    key={stage}
+                    index={index}
+                    label={STAGE_LABELS[stage]}
+                  />
+                ))}
           </div>
-        )}
+        </section>
+      ) : null}
 
-        {result && (
-          <div className="mt-8 space-y-6">
-            <section
-              className={`rounded-2xl border p-6 ${
-                successful
-                  ? "border-emerald-500/30 bg-emerald-500/10"
-                  : result.status === "needs_input"
-                    ? "border-amber-500/30 bg-amber-500/10"
-                    : "border-red-500/30 bg-red-500/10"
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <div className="text-sm uppercase tracking-wider text-slate-400">
-                    Result
-                  </div>
+      {result ? (
+        <>
+          <section className="mt-10">
+            <PanelTitle>{result.message}</PanelTitle>
 
-                  <h2 className="mt-2 text-2xl font-bold">
-                    {result.message}
-                  </h2>
+            <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-4">
+              <Figure label="Intent" value={INTENT_LABELS[result.intent]} />
+              <Figure label="Status" value={result.status.replace("_", " ")} />
+              <Figure
+                label="Confidence"
+                value={`${Math.round(result.confidence * 100)}%`}
+              />
+              <Figure label="Run" value={result.run_id.slice(0, 8)} />
+            </div>
 
-                  <p className="mt-2 text-slate-300">
-                    {result.employee_name
-                      ? `Employee: ${result.employee_name}`
-                      : "Employee could not be resolved"}
-                  </p>
-                </div>
+            <Caption className="mt-4 text-ink-tertiary">
+              {result.employee_name
+                ? `Employee: ${result.employee_name}`
+                : "No employee could be resolved from that instruction."}
+            </Caption>
+          </section>
 
-                <div className="rounded-full border border-white/10 bg-slate-950/50 px-4 py-2 text-sm">
-                  {Math.round(result.confidence * 100)}%
-                  confidence
-                </div>
-              </div>
+          {Object.keys(result.summary).length > 0 ? (
+            <section className="mt-10">
+              <PanelTitle>Proof of work</PanelTitle>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <ResultMetric
-                  label="Intent"
-                  value={
-                    result.intent === "onboard_employee"
-                      ? "Onboarding"
-                      : result.intent ===
-                          "offboard_employee"
-                        ? "Offboarding"
-                        : "Unknown"
-                  }
-                />
-
-                <ResultMetric
-                  label="Status"
-                  value={result.status}
-                />
-
-                <ResultMetric
-                  label="Run ID"
-                  value={result.run_id.slice(0, 8)}
-                />
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <h2 className="text-xl font-bold">
-                Execution timeline
-              </h2>
-
-              <div className="mt-5 space-y-4">
-                {result.steps.map((step) => (
-                  <div
-                    key={`${step.sequence}-${step.stage}`}
-                    className="flex gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4"
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                        step.status === "verified" ||
-                        step.status === "completed"
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : step.status === "failed"
-                            ? "bg-red-500/20 text-red-300"
-                            : "bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {step.sequence}
-                    </div>
-
-                    <div>
-                      <div className="font-semibold capitalize">
-                        {step.stage}
-                      </div>
-
-                      <div className="mt-1 text-sm text-slate-400">
-                        {step.message}
-                      </div>
-
-                      <div className="mt-2 text-xs uppercase tracking-wider text-slate-500">
-                        {step.status}
-                      </div>
-                    </div>
-                  </div>
+              <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-3">
+                {Object.entries(result.summary).map(([key, value]) => (
+                  <Figure
+                    key={key}
+                    label={titleCase(key)}
+                    value={String(value)}
+                  />
                 ))}
               </div>
             </section>
+          ) : null}
 
-            <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <h2 className="text-xl font-bold">
-                Proof of work
-              </h2>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            {result.employee_id ? (
+              <Link
+                href={`/employees/${result.employee_id}`}
+                className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
+              >
+                View employee
+                <ArrowRight size={12} strokeWidth={2} />
+              </Link>
+            ) : null}
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Object.entries(result.summary).map(
-                  ([key, value]) => (
-                    <ResultMetric
-                      key={key}
-                      label={key
-                        .replaceAll("_", " ")
-                        .replace(/\b\w/g, (letter) =>
-                          letter.toUpperCase()
-                        )}
-                      value={String(value)}
-                    />
-                  )
-                )}
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                {result.employee_id && (
-                  <Link
-                    href={`/employees/${result.employee_id}`}
-                    className="rounded-lg bg-cyan-400 px-5 py-3 font-semibold text-slate-950 hover:bg-cyan-300"
-                  >
-                    View Employee
-                  </Link>
-                )}
-
-                <Link
-                  href="/dashboard"
-                  className="rounded-lg border border-slate-700 px-5 py-3 font-semibold hover:bg-slate-800"
-                >
-                  View Dashboard
-                </Link>
-              </div>
-
-              {successful &&
-                result.intent === "onboard_employee" && (
-                  <p className="mt-5 text-sm text-emerald-300">
-                    The employee is now visible under Active
-                    Employees on the dashboard.
-                  </p>
-                )}
-
-              {successful &&
-                result.intent === "offboard_employee" && (
-                  <p className="mt-5 text-sm text-emerald-300">
-                    The employee is now visible under Past
-                    Employees on the dashboard.
-                  </p>
-                )}
-            </section>
+            <Link
+              href="/dashboard"
+              className="font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
+            >
+              Back to directory
+            </Link>
           </div>
-        )}
-      </section>
-    </main>
+        </>
+      ) : null}
+    </Shell>
   );
 }
 
-function ResultMetric({
+function StageRow({
+  index,
   label,
-  value,
+  step,
 }: {
+  index: number;
   label: string;
-  value: string;
+  step?: GaryAgentStep;
 }) {
+  const muted = !step;
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <div className="text-xs uppercase tracking-wider text-slate-500">
-        {label}
+    <div className="flex items-start justify-between gap-6 border-b border-hairline px-inset py-4 last:border-b-0">
+      <div className="flex items-start gap-4">
+        <span
+          className={`font-ui text-ui tabular-nums ${muted ? "text-ink-tertiary" : "text-ink-secondary"}`}
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
+
+        <div className="flex flex-col gap-1">
+          <span
+            className={`font-ui text-ui ${muted ? "text-ink-tertiary" : "text-ink"}`}
+          >
+            {label}
+          </span>
+
+          {step?.message ? (
+            <span className="font-ui text-ui leading-5 text-ink-tertiary">
+              {step.message}
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      <div className="mt-2 break-words font-semibold text-white">
+      {step?.status === "verified" ? (
+        <Verified />
+      ) : (
+        <span
+          className={`font-ui text-ui whitespace-nowrap ${
+            step?.status === "failed" ? "text-ink" : "text-ink-tertiary"
+          }`}
+        >
+          {step ? step.status.replace("_", " ") : "—"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-2 bg-surface p-inset">
+      <span className="font-ui text-ui text-ink-tertiary">{label}</span>
+      <span className="font-display text-[24px] leading-none break-words">
         {value}
-      </div>
+      </span>
     </div>
   );
 }

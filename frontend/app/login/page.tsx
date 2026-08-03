@@ -1,15 +1,20 @@
 "use client";
 
+import { ArrowRight, KeyRound, Mail } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Logo } from "@/components/ui/Logo";
+import { Caption, PanelTitle } from "@/components/ui/Panel";
 import { login } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("admin@gatekeep.demo");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,11 +26,7 @@ export default function LoginPage() {
     try {
       const response = await login(email, password);
 
-      localStorage.setItem(
-        "gatekeep_token",
-        response.access_token
-      );
-
+      localStorage.setItem("gatekeep_token", response.access_token);
       localStorage.setItem(
         "gatekeep_user",
         JSON.stringify(response.user)
@@ -34,9 +35,7 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to log in"
+        error instanceof Error ? error.message : "Unable to log in"
       );
     } finally {
       setLoading(false);
@@ -44,71 +43,63 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
-      <div className="w-full max-w-md">
-        <Link
-          href="/"
-          className="mb-8 inline-block text-2xl font-bold"
-        >
-          GateKeep
-        </Link>
+    <div className="flex min-h-screen flex-col bg-canvas">
+      {/* Same bar as the rest of the app, minus the Login action — its only
+          job here is a way back to the home page. */}
+      <header className="border-b border-hairline bg-surface">
+        <div className="mx-auto flex max-w-7xl items-center px-6 py-4">
+          <Link href="/" className="text-brand">
+            <Logo size={22} />
+          </Link>
+        </div>
+      </header>
 
+      <main className="flex flex-1 items-center justify-center p-6">
+        {/* login-modal — Figma node 1:34 */}
         <form
           onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-2xl"
+          className="flex w-[325px] max-w-full flex-col gap-6 bg-surface p-inset"
         >
-          <h1 className="text-3xl font-bold">
-            Administrator login
-          </h1>
+          <PanelTitle>Start Gatekeeping</PanelTitle>
 
-          <p className="mt-2 text-slate-400">
-            Access the company identity directory.
-          </p>
+        <Field
+          icon={Mail}
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
 
-          <label className="mt-8 block text-sm font-medium">
-            Email
-          </label>
+        <Field
+          icon={KeyRound}
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
 
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-cyan-400"
-          />
+        <Button
+          type="submit"
+          icon={ArrowRight}
+          disabled={loading || !email || !password}
+          className="w-full justify-start"
+        >
+          {loading ? "Signing in" : "Login"}
+        </Button>
 
-          <label className="mt-5 block text-sm font-medium">
-            Password
-          </label>
-
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-cyan-400"
-          />
-
-          {error && (
-            <div className="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {error}
-            </div>
+          {error ? (
+            <Caption className="text-ink">{error}</Caption>
+          ) : (
+            <Caption className="text-ink-tertiary">
+              Demo · admin@gatekeep.demo · admin123
+            </Caption>
           )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-6 w-full rounded-lg bg-cyan-400 px-4 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-
-          <div className="mt-6 rounded-lg bg-slate-950 p-4 text-sm text-slate-400">
-            <div>Demo email: admin@gatekeep.demo</div>
-            <div>Demo password: admin123</div>
-          </div>
         </form>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
